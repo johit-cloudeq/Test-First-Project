@@ -3,7 +3,7 @@ name: 'Terraform-dev'
 on:
   push:
     branches:
-    - Feature/Bridgrecrew
+    - main
     paths-ignore:
     - 'README.md'
 

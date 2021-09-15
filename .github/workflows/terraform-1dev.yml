@@ -43,5 +43,5 @@ jobs:
         uses: bridgecrewio/checkov-action@master
         with:
 #           commands: checkov -d . 
-          directory: -b feature-Scan -d .
+          directory: -b feature-Scan -d/.
           framework: terraform

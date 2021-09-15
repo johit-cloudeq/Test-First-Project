@@ -1,4 +1,4 @@
-name: 'checkov-Bridgescan'
+name: 'checkov-Bridgescantest'
 
 on:
   push:

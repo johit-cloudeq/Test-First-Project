@@ -1,0 +1,7 @@
+commvault_storageaccount="mcdmacfeeinstaller"
+commvault_container_name="linuxagents"
+commvault_blob_name="CommvaultLinuxAgentInstaller-11.el7_9.x86_64.rpm"
+sentinel_storageaccount="mcdmacfeeinstaller"
+sentinel_container_name="mcdantivirus-sentinal"
+sentinel_storageblobname="SentinelAgent-Linux.zip"
+pp_container="scripts"

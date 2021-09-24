@@ -1,0 +1,536 @@
+# QA:
+# MCD-CORP-PROD-01   
+# 345395af-dab3-4547-9ebb-bbb00ceffcac
+# UAT:
+# MCD-CORP-NONPROD-01
+# 2b8dbbd2-999e-49f3-bb5e-f307d7658ac6
+# PROD:
+# McDonalds Corp - Sandbox (Infosys)
+# 1ff52360-ccb7-42c0-8a63-e4424d746eac
+
+name: 'Terraform'
+
+env:
+  APP_ID: APPID00003
+  
+on:
+  workflow_dispatch:
+    inputs:
+      infra_env:
+        description: 'Environment Name'
+        required: true
+        default: 'qa'
+
+jobs:
+
+  terraform:
+    name: "terraform scan & Plan"
+    runs-on: ubuntu-latest
+
+
+    defaults:
+      run:
+        shell: bash
+        
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      
+    - name: Setup git global config
+      run:  git config --global url."https://oauth2:${{secrets.PAT_TOKEN}}@github.com".insteadOf https://github.com
+      
+    - name: Terraform Scan Install
+      run: curl --location https://github.com/accurics/terrascan/releases/download/v1.9.0/terrascan_1.9.0_Linux_x86_64.tar.gz --output terrascan.tar.gz && tar -xf terrascan.tar.gz terrascan && rm terrascan.tar.gz && install terrascan /usr/local/bin && rm terrascan && terrascan
+
+    - name: Run Terrascan Scan
+      run: terrascan scan -t azure
+      continue-on-error: true
+      
+
+    - name: "Setting Environment"
+      env:
+        QA_ENV: ${{ contains(github.event.inputs.infra_env, 'qa') }}
+        UAT_ENV: ${{ contains(github.event.inputs.infra_env, 'uat') }}
+        PROD_ENV: ${{ contains(github.event.inputs.infra_env, 'prod') }}
+      run: |
+        if ${QA_ENV} == true; then
+          echo "ARM_CLIENT_ID=${{secrets.CEQ_AZURE_SANDBOX_TF_ARM_CLIENT_ID}}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{secrets.CEQ_AZURE_SANDBOX_TF_ARM_CLIENT_SECRET}}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{secrets.CEQ_AZURE_SANDBOX_TF_ARM_SUBS_ID}}" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=${{secrets.CEQ_AZURE_SANDBOX_TF_ARM_TENANT_ID}}" >> $GITHUB_ENV
+          echo "TFSTATE_RG=ceq-vm-provissioning-tfstate" >> $GITHUB_ENV
+          echo "TFSTATE_STORAGE_ACCOUNT=ceqvmprovisiontfstate" >> $GITHUB_ENV
+          echo "TFSTATE_CONTAINER=tfstate" >> $GITHUB_ENV
+          echo "ENV=qa" >> $GITHUB_ENV
+        elif ${PROD_ENV} == true;
+        then
+          echo "ARM_CLIENT_ID=${{secrets.CEQ_AZURE_GITHUB_PROD01_TF_ARM_CLIENT_ID}}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{secrets.CEQ_AZURE_GITHUB_PROD01_TF_ARM_CLIENT_SECRET}}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{secrets.CEQ_AZURE_GITHUB_PROD01_TF_ARM_SUBS_ID}}" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=${{secrets.CEQ_AZURE_GITHUB_PROD01_TF_ARM_TENANT_ID}}" >> $GITHUB_ENV
+          echo "TFSTATE_RG=RG-2W-IMAGE-PROD" >> $GITHUB_ENV
+          echo "TFSTATE_STORAGE_ACCOUNT=mcdposttaskprodstorage" >> $GITHUB_ENV
+          echo "TFSTATE_CONTAINER=tfstate" >> $GITHUB_ENV
+          echo "ENV=prod" >> $GITHUB_ENV
+        elif ${UAT_ENV} == true;
+        then
+          echo "ARM_CLIENT_ID=${{secrets.CEQ_AZURE_GITHUB_NON_PROD_TF_ARM_CLIENT_ID}}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{secrets.CEQ_AZURE_GITHUB_NON_PROD_TF_ARM_CLIENT_SECRET}}" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=${{secrets.CEQ_AZURE_GITHUB_NON_PROD_TF_ARM_SUBS_ID}}" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=${{secrets.CEQ_AZURE_GITHUB_NON_PROD_TF_ARM_TENANT_ID}}" >> $GITHUB_ENV
+          echo "TFSTATE_RG=ceq-vm-provissioning-tfstate" >> $GITHUB_ENV
+          echo "TFSTATE_STORAGE_ACCOUNT=ceqvmtfstatenonprod" >> $GITHUB_ENV
+          echo "TFSTATE_CONTAINER=tfstate" >> $GITHUB_ENV
+          echo "ENV=uat" >> $GITHUB_ENV
+        else
+          echo "environment not supported"
+          Exit 1
+        fi
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_version: 1.0.0
+        terraform_wrapper: false
+      
+    - name: Terraform Init 
+      run: terraform init -reconfigure -force-copy -backend-config="resource_group_name=$TFSTATE_RG" -backend-config="storage_account_name=$TFSTATE_STORAGE_ACCOUNT" -backend-config="container_name=$TFSTATE_CONTAINER" -backend-config="key=$ENV-$APP_ID.tfstate" -input=false
+
+    - name: Terraform Plan 
+      run: terraform plan -var-file="$ENV/terraform.tfvars" -input=false
+
+  
+  terraformApply: 
+    name: 'Terraform_Apply'
+    runs-on: ubuntu-latest
+    needs: ["terraform"]
+
+    environment:
+      name: terraform_apply
+
+    defaults:
+     run:
+      shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        
+        
+      - name: "Setting Environment"
+        env:
+          QA_ENV: ${{ contains(github.event.inputs.infra_env, 'qa') }}
+          UAT_ENV: ${{ contains(github.event.inputs.infra_env, 'uat') }}
+          PROD_ENV: ${{ contains(github.event.inputs.infra_env, 'prod') }}
+        run: |
+          if ${QA_ENV} == true; then
+            echo "ARM_CLIENT_ID=${{secrets.CEQ_AZURE_SANDBOX_TF_ARM_CLIENT_ID}}" >> $GITHUB_ENV
+            echo "ARM_CLIENT_SECRET=${{secrets.CEQ_AZURE_SANDBOX_TF_ARM_CLIENT_SECRET}}" >> $GITHUB_ENV
+            echo "ARM_SUBSCRIPTION_ID=${{secrets.CEQ_AZURE_SANDBOX_TF_ARM_SUBS_ID}}" >> $GITHUB_ENV
+            echo "ARM_TENANT_ID=${{secrets.CEQ_AZURE_SANDBOX_TF_ARM_TENANT_ID}}" >> $GITHUB_ENV
+            echo "TFSTATE_RG=ceq-vm-provissioning-tfstate" >> $GITHUB_ENV
+            echo "TFSTATE_STORAGE_ACCOUNT=ceqvmprovisiontfstate" >> $GITHUB_ENV
+            echo "TFSTATE_CONTAINER=tfstate" >> $GITHUB_ENV
+            echo "ENV=qa" >> $GITHUB_ENV
+          elif ${PROD_ENV} == true;
+          then
+            echo "ARM_CLIENT_ID=${{secrets.CEQ_AZURE_GITHUB_PROD01_TF_ARM_CLIENT_ID}}" >> $GITHUB_ENV
+            echo "ARM_CLIENT_SECRET=${{secrets.CEQ_AZURE_GITHUB_PROD01_TF_ARM_CLIENT_SECRET}}" >> $GITHUB_ENV
+            echo "ARM_SUBSCRIPTION_ID=${{secrets.CEQ_AZURE_GITHUB_PROD01_TF_ARM_SUBS_ID}}" >> $GITHUB_ENV
+            echo "ARM_TENANT_ID=${{secrets.CEQ_AZURE_GITHUB_PROD01_TF_ARM_TENANT_ID}}" >> $GITHUB_ENV
+            echo "TFSTATE_RG=RG-2W-IMAGE-PROD" >> $GITHUB_ENV
+            echo "TFSTATE_STORAGE_ACCOUNT=mcdposttaskprodstorage" >> $GITHUB_ENV
+            echo "TFSTATE_CONTAINER=tfstate" >> $GITHUB_ENV
+            echo "ENV=prod" >> $GITHUB_ENV
+          elif ${UAT_ENV} == true;
+          then
+            echo "ARM_CLIENT_ID=${{secrets.CEQ_AZURE_GITHUB_NON_PROD_TF_ARM_CLIENT_ID}}" >> $GITHUB_ENV
+            echo "ARM_CLIENT_SECRET=${{secrets.CEQ_AZURE_GITHUB_NON_PROD_TF_ARM_CLIENT_SECRET}}" >> $GITHUB_ENV
+            echo "ARM_SUBSCRIPTION_ID=${{secrets.CEQ_AZURE_GITHUB_NON_PROD_TF_ARM_SUBS_ID}}" >> $GITHUB_ENV
+            echo "ARM_TENANT_ID=${{secrets.CEQ_AZURE_GITHUB_NON_PROD_TF_ARM_TENANT_ID}}" >> $GITHUB_ENV
+            echo "TFSTATE_RG=ceq-vm-provissioning-tfstate" >> $GITHUB_ENV
+            echo "TFSTATE_STORAGE_ACCOUNT=ceqvmtfstatenonprod" >> $GITHUB_ENV
+            echo "TFSTATE_CONTAINER=tfstate" >> $GITHUB_ENV
+            echo "ENV=uat" >> $GITHUB_ENV
+          else
+            echo "environment not supported"
+          fi
+      
+    # Checkout the repository to the GitHub Actions runner 
+      - name: Login to azure
+        uses: azure/login@v1
+        with:
+           creds: '{"clientId":"${{ env.ARM_CLIENT_ID }}","clientSecret":"${{ env.ARM_CLIENT_SECRET }}","subscriptionId":"${{ env.ARM_SUBSCRIPTION_ID }}","tenantId":"${{ env.ARM_TENANT_ID }}"}'
+           enable-AzPSSession: true
+
+
+          # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.0.0
+          terraform_wrapper: false
+          
+      - name: Setup git global config
+        run:  git config --global url."https://oauth2:${{secrets.PAT_TOKEN}}@github.com".insteadOf https://github.com
+        
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+      - name: Terraform Init 
+        run: terraform init -reconfigure -force-copy -backend-config="resource_group_name=$TFSTATE_RG" -backend-config="storage_account_name=$TFSTATE_STORAGE_ACCOUNT" -backend-config="container_name=$TFSTATE_CONTAINER" -backend-config="key=$ENV-$APP_ID.tfstate" -input=false
+
+      - name: Terraform Apply 
+        run: terraform apply -auto-approve -var-file="$ENV/terraform.tfvars" -input=false
+
+      - name: Terraform Output 
+        run: vm=$(terraform output) && echo $vm > terraform-output1.ps1  &&  cat terraform-output1.ps1
+
+
+      - name: Convert Terraform Output To CSV
+        shell: pwsh
+        run: |
+            try {
+              [string]$str = get-Content terraform-output1.ps1
+              $last=$str.length-8
+              $str1=$str.Substring(7,$last)
+              $str2=$str1.replace("=","")
+              $str3=$str2.replace("  "," ")
+              $str4=$str3.trim()
+              $str5=$str4.replace('"','')
+              $str0=$str5.replace("}","")
+              $str6=$str0.trim()
+              $str7=$Str6.split(" ")
+              $lnt = $null
+              $Hash = @{}
+              $lnt= $str7.length/2
+              for ($i=0; $i -lt $lnt; $i++) {
+               $Hash.Add($str7[2*$i],$str7[2*$i+1])
+              }
+             $Hash.GetEnumerator() | Select-Object -Property key, value | Export-Csv -NoTypeInformation -Path .\newvmlistold.csv
+             Get-Content -Path .\newvmlistold.csv | Select-Object -Skip 1 | Add-Content -Path .\newvmlist.csv 
+             Get-Content -Path  .\newvmlist.csv
+            }
+            catch {
+                write-host "NO Vms found in Output for post provisiong steps"
+                new-item .\newvmlist.csv
+            }
+      - name: Download Azure Dependencies Modules
+        uses: azure/powershell@v1
+        with:
+          inlineScript: | 
+                Install-Module -Name Az.Compute -Force -AllowClobber
+                Install-Module -Name Az.Storage -Force -AllowClobber
+                Install-Module -Name Az.Network -Force -AllowClobber
+          azPSVersion: '5.0.0'
+
+      - name: Variable file for PS
+        run: sed '/^/ s/./$&/' $ENV/post-provisioning-vars.sh > $ENV/variables.ps1 
+        continue-on-error: true
+
+      - name: Run Azure PowerShell -CSV File Download
+        uses: azure/powershell@v1
+        with:
+          inlineScript: |
+            . .\${{env.ENV}}\variables.ps1
+            $date=(get-date).AddMinutes(10).ToString("HH:mm");
+            $storage_account = New-AzStorageContext -StorageAccountName "$sentinel_storageaccount" -UseConnectedAccount;
+            try {
+              Get-AzStorageBlobContent -Container $pp_container -Blob ${{env.ENV}}-${{env.APP_ID}}.csv -Context $storage_account 
+            }
+            catch {
+            write-host "***********Find Not found. Creatig New file in next step************"
+            }
+          azPSVersion: '5.0.0'
+        continue-on-error: true 
+
+
+      - name: Compare Both Files
+        shell: pwsh
+        run: |
+          $vm_check = Get-Content -Path  .\newvmlist.csv
+          if ( $null -eq $vm_check) {
+          Write-Output "Reseting the CSV file to null"
+          new-item .\${{env.ENV}}-${{env.APP_ID}}.csv -force
+          new-item hash.ps1
+          }else {
+          #Import both files
+          try {
+             Write-Output "try"
+             $vms = Import-Csv -Path ./${{env.ENV}}-${{env.APP_ID}}.csv -Header 'vm', 'rg'
+             # File 1 will retain information for Vmson which Post provisioning done
+             $vm_check = Import-Csv -Path "./newvmlist.csv" -Header 'vm', 'rg' 
+             # File 2 will retain information ablut runtime generated VM and RG list
+             # $file2 | Format-Table
+             $dict = New-Object System.Collections.Generic.Dictionary"[String,String]"
+             $newstoragelist = New-Object System.Collections.Generic.Dictionary"[String,String]"
+             # Loop through the file
+             foreach ($vm_chk in $vm_check)
+             {
+                 if ($vms | Where-Object {$_.vm -eq $vm_chk.vm -and $_.rg -eq $vm_chk.rg})
+                 {
+                     Write-Output "Vm, rg exist" $vm_chk.vm , $vm_chk.rg
+                     $newstoragelist.Add($vm_chk.vm, $vm_chk.rg)
+                 }
+                 else
+                 {
+                     Write-Output "Vm, rg not exist" $vm_chk.vm , $vm_chk.rg
+                     $dict.Add($vm_chk.vm, $vm_chk.rg) 
+                     $newstoragelist.Add($vm_chk.vm, $vm_chk.rg)
+                 }
+              }
+             Write-Output $dict > hash.ps1
+             $newstoragelist.GetEnumerator() | Select-Object -Property key, value | Export-Csv -Path .\newvmlist3.csv
+             Get-Content -Path .\newvmlist3.csv | Select-Object -Skip 1 | Add-Content -Path .\${{env.ENV}}-${{env.APP_ID}}.csv
+          }
+          catch {
+               Write-Output "catch"
+               new-item ./${{env.ENV}}-${{env.APP_ID}}.csv
+               $vms = Import-Csv -Path ./${{env.ENV}}-${{env.APP_ID}}.csv -Header 'vm', 'rg'
+               $vm_check = Import-Csv -Path "./newvmlist.csv" -Header 'vm', 'rg' 
+               # File 2 will retain information ablut runtime generated VM and RG list
+               # $file2 | Format-Table
+               $dict = New-Object System.Collections.Generic.Dictionary"[String,String]"
+               $newstoragelist = New-Object System.Collections.Generic.Dictionary"[String,String]"
+               # Loop through the file
+               foreach ($vm_chk in $vm_check)
+               {
+                   if ($vms | Where-Object {$_.vm -eq $vm_chk.vm -and $_.rg -eq $vm_chk.rg})
+                   {
+                       Write-Output "Vm, rg exist" $vm_chk.vm , $vm_chk.rg
+                       $newstoragelist.Add($vm_chk.vm, $vm_chk.rg)
+                   }
+                   else
+                   {
+                       Write-Output "Vm, rg not exist" $vm_chk.vm , $vm_chk.rg
+                       $dict.Add($vm_chk.vm, $vm_chk.rg) 
+                       $newstoragelist.Add($vm_chk.vm, $vm_chk.rg)
+                   }
+                }
+               Write-Output $dict > ./hash.ps1
+               $newstoragelist.GetEnumerator() | Select-Object -Property key, value | Export-Csv -Path .\newvmlist3.csv
+               Get-Content -Path .\newvmlist3.csv | Select-Object -Skip 1 | Add-Content -Path .\${{env.ENV}}-${{env.APP_ID}}.csv 
+          }
+          }
+
+      - name: Registering RHEL (Bootstrapping)
+        uses: azure/powershell@v1
+        with:
+          inlineScript: |
+            $vm_name = Get-Content hash.ps1
+            $lastcount=$vm_name.count-1
+            $target=@{}
+            for ($i=3; $i -lt $lastcount; $i++) {
+                $vm_name1= $null
+                $vm_name1=$vm_name[$i].split(" ")
+                $target.Add($vm_name1[0],$vm_name1[$vm_name1.count-1])
+            }
+            $target.GetEnumerator() | ForEach-Object{
+            $Bootstrapping = @{
+              ResourceGroupName = $_.Value
+              VMName = $_.Key
+              CommandId = "RunShellScript"
+              ScriptPath = "./provisioning/rhel7-register.sh"
+            }
+            $azvm= Get-AzVM -ResourceGroupName $_.Value -Name $_.Key
+            $azvm.Location
+            Invoke-AzVMRunCommand @Bootstrapping 
+            }
+          azPSVersion: '5.0.0'
+        continue-on-error: true
+
+      - name: Kernal Installation
+        uses: azure/powershell@v1
+        with:
+          inlineScript: |
+            $vm_name = Get-Content hash.ps1
+            $lastcount=$vm_name.count-1
+            $target=@{}
+            for ($i=3; $i -lt $lastcount; $i++) {
+                $vm_name1= $null
+                $vm_name1=$vm_name[$i].split(" ")
+                $target.Add($vm_name1[0],$vm_name1[$vm_name1.count-1])
+            }
+            $target.GetEnumerator() | ForEach-Object{
+            $kernelinstallation = @{
+              ResourceGroupName = $_.Value
+              VMName = $_.Key
+              CommandId = "RunShellScript"
+              ScriptPath = "./provisioning/Kernal_Configurations.sh"
+            }
+            $azvm= Get-AzVM -ResourceGroupName $_.Value -Name $_.Key
+            $azvm.Location
+            Invoke-AzVMRunCommand @kernelinstallation 
+            }
+          azPSVersion: '5.0.0'
+        continue-on-error: true
+
+      - name: DiskSetup
+        uses: azure/powershell@v1
+        with:
+          inlineScript: |
+            $vm_name = Get-Content hash.ps1
+            $lastcount=$vm_name.count-1
+            $target=@{}
+            for ($i=3; $i -lt $lastcount; $i++) {
+                $vm_name1= $null
+                $vm_name1=$vm_name[$i].split(" ")
+                $target.Add($vm_name1[0],$vm_name1[$vm_name1.count-1])
+            }
+            $target.GetEnumerator() | ForEach-Object{
+            $kernelinstallation = @{
+              ResourceGroupName = $_.Value
+              VMName = $_.Key
+              CommandId = "RunShellScript"
+              ScriptPath = "./provisioning/DiskSetup.sh"
+            }
+            $azvm= Get-AzVM -ResourceGroupName $_.Value -Name $_.Key
+            $azvm.Location
+            Invoke-AzVMRunCommand @kernelinstallation 
+            }
+          azPSVersion: '5.0.0'
+        continue-on-error: true
+
+      - name: Run Azure PowerShell Sentinal Install -multiple VMS
+        uses: azure/powershell@v1
+        with:
+          inlineScript: |
+            . .\${{env.ENV}}\variables.ps1
+            $pwd = get-location
+            $date=(get-date).AddMinutes(60).ToString("HH:mm");
+            $storage_account = New-AzStorageContext -StorageAccountName "$sentinel_storageaccount" -UseConnectedAccount;
+            $account_sas = New-AzStorageContainerSASToken -Context $storage_account  -Name "$sentinel_container_name" -Permission r -ExpiryTime $date;
+             $script = get-content "./provisioning/ConfigureSentinel.sh" -raw
+             "sentinel_sas=" + "`"" +"$account_sas" + "`""  +"`n$script" |Out-File "./provisioning/ConfigureSentinel.sh"
+            echo "$account_sas"
+            $vm_name = Get-Content hash.ps1
+            $lastcount=$vm_name.count-1
+            $target=@{}
+            for ($i=3; $i -lt $lastcount; $i++) {
+                $vm_name1= $null
+                $vm_name1=$vm_name[$i].split(" ")
+                $target.Add($vm_name1[0],$vm_name1[$vm_name1.count-1])
+            }
+            $target.GetEnumerator() | ForEach-Object{
+            $azParmsSentinelInstall = @{
+              ResourceGroupName = $_.Value
+              VMName = $_.Key
+              CommandId = "RunShellScript"
+              ScriptPath = "./provisioning/ConfigureSentinel.sh"
+            }
+            $azvm= Get-AzVM -ResourceGroupName $_.Value -Name $_.Key
+            [string]$location=$azvm.Location
+            if ("${{env.PROD_ENV}}" -eq "true") {
+            Invoke-AzVMRunCommand @azParmsSentinelInstall -Parameter @{storageblobname = "$sentinel_storageblobname"; storageaccount = "$sentinel_storageaccount";storagecontainer="$sentinel_container_name"; token = "${{secrets.SENTINEL_PROD_TOKEN}}"; region = "$location";}
+            } else {
+            Invoke-AzVMRunCommand @azParmsSentinelInstall -Parameter @{storageblobname = "$sentinel_storageblobname"; storageaccount = "$sentinel_storageaccount";storagecontainer="$sentinel_container_name"; token = "${{secrets.SENTINEL_TOKEN}}"; region = "$location";}
+            }
+            }
+          azPSVersion: '5.0.0'
+        continue-on-error: true
+
+      - name: Run Azure PowerShell Configure Commvault -multiple VMS
+        uses: azure/powershell@v1
+        with:
+          inlineScript: |
+            . .\${{env.ENV}}\variables.ps1
+            $date=(get-date).AddMinutes(60).ToString("HH:mm")
+            $storage_account = New-AzStorageContext -StorageAccountName "$commvault_storageaccount" -UseConnectedAccount
+            $account_sas = New-AzStorageContainerSASToken -Context $storage_account  -Name "$commvault_container_name"  -Permission r  -ExpiryTime $date 
+            $script = get-content "./provisioning/ConfigureCommvault.sh" -raw
+            "commvault_sas=" + "`"" +"$account_sas" + "`""  +"`n$script" |Out-File "./provisioning/ConfigureCommvault.sh"
+            $vm_name = Get-Content hash.ps1
+            $lastcount=$vm_name.count-1
+            $target=@{}
+            for ($i=3; $i -lt $lastcount; $i++) {
+                $vm_name1= $null
+                $vm_name1=$vm_name[$i].split(" ")
+                $target.Add($vm_name1[0],$vm_name1[$vm_name1.count-1])
+            }
+            $target.GetEnumerator() | ForEach-Object{
+            $azParmsConfigureCommvault = @{
+              ResourceGroupName = $_.Value
+              VMName = $_.Key
+              CommandId = "RunShellScript"
+              ScriptPath = "./provisioning/ConfigureCommvault.sh"
+            }
+            Invoke-AzVMRunCommand @azParmsConfigureCommvault -Parameter @{storagecontainer="$commvault_container_name";storageaccount="$commvault_storageaccount";vcplusinstaller="$vcplusinstaller";commvault_servicepack_blob="$commvault_blob_name";}
+            }
+          azPSVersion: '5.0.0'  
+        continue-on-error: true
+
+      - name: newrelic Installation
+        env:
+          QA_ENV: ${{ contains(github.event.inputs.infra_env, 'qa') }}
+          UAT_ENV: ${{ contains(github.event.inputs.infra_env, 'uat') }}
+          PROD_ENV: ${{ contains(github.event.inputs.infra_env, 'prod') }}
+        uses: azure/powershell@v1
+        with:
+          inlineScript: |
+            if (("${{env.PROD_ENV}}" -eq "true") -or ("${{env.UAT_ENV}}" -eq "true")) {
+              if ($env:ARM_SUBSCRIPTION_ID -eq '345395af-dab3-4547-9ebb-bbb00ceffcac') {
+              $AccountId="${{secrets.CEQ_NEWRELIC_MCD_CORP_PROD_01_ACCOUNTID}}"
+              $Key="${{secrets.CEQ_NEWRELIC_MCD_CORP_PROD_01_KEY}}"
+              }
+              if ($env:ARM_SUBSCRIPTION_ID -eq '2b8dbbd2-999e-49f3-bb5e-f307d7658ac6') {
+              $AccountId="${{secrets.CEQ_NEWRELIC_MCD_CORP_NONPROD_01_ACCOUNTID}}"
+              $Key="${{secrets.CEQ_NEWRELIC_MCD_CORP_NONPROD_01_KEY}}"
+              }
+              $vm_name = Get-Content hash.ps1
+              $lastcount=$vm_name.count-1
+              $target=@{}
+              for ($i=3; $i -lt $lastcount; $i++) {
+                  $vm_name1= $null
+                  $vm_name1=$vm_name[$i].split(" ")
+                  $target.Add($vm_name1[0],$vm_name1[$vm_name1.count-1])
+              }
+              $target.GetEnumerator() | ForEach-Object{
+              $newrelicinstallation = @{
+                ResourceGroupName = $_.Value
+                VMName = $_.Key
+                CommandId = "RunShellScript"
+                ScriptPath = "./provisioning/newrelic.sh"
+              }
+              $azvm= Get-AzVM -ResourceGroupName $_.Value -Name $_.Key
+              [string]$location=$azvm.Location
+              Invoke-AzVMRunCommand @newrelicinstallation -Parameter @{Key="$Key";AccountId ="$AccountId ";region="$location";}
+              }
+            } else {write-output "Step Skipped"}
+          azPSVersion: '5.0.0'
+        continue-on-error: true
+        
+      #Script to Add User and group to Centrify Server
+      - name: Azure PowerShell For Add User to Centrify Server
+        uses: Azure/powershell@v1
+        with:
+          # Specify the Az PowerShell script here.
+          inlineScript: | 
+            if ("${{env.PROD_ENV}}" -eq "true") {
+            . .\${{env.ENV}}\variables.ps1
+              $azParm = @{
+              ResourceGroupName = "$(ad_vm_group_name)"
+              Name = "$(ad_vmname)"
+              CommandId = "RunPowerShellScript"
+              ScriptPath = "./provisioning/CreateGroupforCentrify.ps1"
+              }
+              Invoke-AzVMRunCommand @azParm -Parameter @{vm_name="$_.key";is_new="$(is_new)";ad_group="$(ad_group_name)";identity_name="$(ad_identity_name)";member_of_group_names="$(member_of_ad_group_names)";group_owner="$(ad_group_owner)";security_group_name="$(ad_security_group_name)";users="$(ad_users)";ou="$(ou)"}
+              $azParms = @{
+              ResourceGroupName = "$(centrify_vm_rg_name)"
+              Name = "$(centrify_vm_name)"
+              CommandId = "RunPowerShellScript"
+              ScriptPath = "./provisioning/CreateUserInCentrify.ps1"
+              }
+              Invoke-AzVMRunCommand @azParms -Parameter @{zone="$(ad_zone)";user_email="$(ad_email)";AD_User="$(ad_user)"}
+            }
+            }
+          azPSVersion: latest
+        continue-on-error: true
+
+      - name: Run Azure PowerShell Upload -final CSV FIle
+        uses: azure/powershell@v1
+        with:
+          inlineScript: |
+            . .\${{env.ENV}}\variables.ps1
+            $date=(get-date).AddMinutes(10).ToString("HH:mm");
+            $storage_account = New-AzStorageContext -StorageAccountName "$sentinel_storageaccount" -UseConnectedAccount;
+            Set-AzStorageBlobContent -File .\${{env.ENV}}-${{env.APP_ID}}.csv  -Container $pp_container -Context $storage_account -force
+          azPSVersion: '5.0.0'
+        continue-on-error: true 

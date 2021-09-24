@@ -1,0 +1,7 @@
+commvault_storageaccount="mcdstoragecd"
+commvault_container_name="linuxagents"
+commvault_blob_name="CommvaultLinuxAgentInstaller-11.el7_9.x86_64.rpm"
+sentinel_storageaccount="mcdstoragecd"
+sentinel_container_name="sentinelagent"
+sentinel_storageblobname="SentinelAgent-Linux.zip"
+pp_container="scripts"

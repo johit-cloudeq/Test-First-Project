@@ -1,15 +1,15 @@
-name: 'checkov-Bridgescann'
+name: 'conversion'
 
 on:
   push:
     branches:
-    - feature-Scan
+    - hcl2yml
     paths-ignore:
     - 'README.md'
 
 jobs:
-  terraform:
-    name: 'Terraform'
+  hcl2yml:
+    name: 'hcl2yml'
     runs-on: ubuntu-latest
     environment: production
 
@@ -23,25 +23,22 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
 
-    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v1
-      with:
-        cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
-  Scan_with_BridgeCrew:
+    
     # The type of runner that the job will run on
-    name: 'bridgecrew_scan'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.8
-      - name: Test with Checkov
-        id: checkov
-        uses: bridgecrewio/checkov-action@master
-        with:
-#           commands: checkov -d . 
-          directory: -b feature-Scan -d/.
-          framework: terraform
+    - name: Download Azure Dependencies Modules
+      uses: azure/powershell@v1
+      with:
+          inlineScript: | 
+                Install-Module -Name Az.Compute -Force -AllowClobber
+                Install-Module -Name Az.Storage -Force -AllowClobber
+                Install-Module -Name Az.Network -Force -AllowClobber
+                Install-Module PowerShell-yaml -Force -AllowClobber
+                Get-Command -Module PowerShell-yaml
+                #convert-os.ps1
+                #Read the YAML file using Get-Content and convert the data to a hashtable using ConvertFrom-Yaml. The $os_list variable stores the hashtable object.
+                $os_list = (Get-Content -Path "./File/terraform.tfvars" | ConvertFrom-Yaml)
+                #Convert the hashtable object in the $os_list variable to JSON format using ConvertTo-Json. Once in JSON, save the save to C:\temp\PowerShell_operating-systems.json file using Set-Content.
+                Set-Content -Path Get-Content -Path "./File/operating-systems.json" -Value ($os_list | ConvertTo-Json)
+          azPSVersion: '5.0.0'
+      
+      

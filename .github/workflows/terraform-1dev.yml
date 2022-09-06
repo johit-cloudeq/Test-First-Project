@@ -39,7 +39,7 @@ jobs:
                 #$os_list = (Get-Content -Path "./File/terraform.yml" | ConvertFrom-Yaml)
                 #Convert the hashtable object in the $os_list variable to JSON format using ConvertTo-Json. Once in JSON, save the save to C:\temp\PowerShell_operating-systems.json file using Set-Content.
                 #Set-Content -Path "./File/terraform.json" -Value ($os_list | ConvertTo-Json)
-                $ tfvars-json terraform.tfvars > file.tfvars.json
+                $tfvars-json terraform.tfvars > file.tfvars.json
           azPSVersion: '5.0.0'
       
       

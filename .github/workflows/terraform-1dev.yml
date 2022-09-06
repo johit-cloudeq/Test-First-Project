@@ -36,7 +36,7 @@ jobs:
                 Get-Command -Module PowerShell-yaml
                 #convert-os.ps1
                 #Read the YAML file using Get-Content and convert the data to a hashtable using ConvertFrom-Yaml. The $os_list variable stores the hashtable object.
-                $os_list = (Get-Content -Path "./File/terraform.tfvars" | ConvertFrom-Yaml)
+                $os_list = (Get-Content -Path "./File/terraform.yml" | ConvertFrom-Yaml)
                 #Convert the hashtable object in the $os_list variable to JSON format using ConvertTo-Json. Once in JSON, save the save to C:\temp\PowerShell_operating-systems.json file using Set-Content.
                 Set-Content -Path "./File/terraform.json" -Value ($os_list | ConvertTo-Json)
           azPSVersion: '5.0.0'

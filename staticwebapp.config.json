@@ -1,10 +1,10 @@
 {
     "trailingSlash": "auto",
     "routes": [
-      {
-        "route": "/dashboard*",
-        "allowedRoles": ["authenticated"]
-      }
+     {
+  "route": "/dashboard*",
+  "rewrite": "/dashboard.html"
+}
 
        ]
 }

@@ -6,10 +6,6 @@
         "allowedRoles": ["authenticated"]
       },
       {
-        "route": "/profile*",
-        "allowedRoles": ["authenticated"]
-      },
-      {
       
             "route": "/*",
             "allowedRoles": ["authenticated"]

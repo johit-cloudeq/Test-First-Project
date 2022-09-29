@@ -1,0 +1,15 @@
+{
+    "trailingSlash": "auto",
+    "routes": [
+      {
+        "route": "/dashboard*",
+        "allowedRoles": ["authenticated"]
+      },
+      {
+      
+            "route": "/*",
+            "allowedRoles": ["authenticated"]
+          }
+    
+    ]
+}

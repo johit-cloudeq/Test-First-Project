@@ -1,15 +1,6 @@
 {
-    "trailingSlash": "auto",
-    "routes": [
-      {
-        "route": "/dashboard*",
-        "allowedRoles": ["authenticated"]
-      },
-      {
-      
-            "route": "/*",
-            "allowedRoles": ["authenticated"]
-          }
-    
-    ]
-}
+    "navigationFallback": {
+        "rewrite": "index.html",
+        "exclude": ["*.{svg,png,jpg,gif}","*.{css,scss}","*.js"]
+      }
+    }
